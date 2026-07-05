@@ -142,7 +142,7 @@ export default function Home() {
                 onClick={handleUserAccess}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-xl font-bold transition-all text-lg flex items-center justify-center gap-2 shadow-sm"
               >
-                <span>👁️</span> View Standings (User)
+                <span></span> View Standings 
               </button>
               
               <div className="relative flex py-2 items-center">
