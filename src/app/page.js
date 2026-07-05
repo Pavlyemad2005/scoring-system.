@@ -4,28 +4,26 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export default function Home() {
-  // Login States
+  // Navigation & Role States
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [username, setUsername] = useState('');
+  const [showAdminForm, setShowAdminForm] = useState(false); // لو true يظهر فورم الأدمن
+  const [userRole, setUserRole] = useState(''); // 'admin' أو 'user'
   const [password, setPassword] = useState('');
-  const [userRole, setUserRole] = useState('');
   
   // Leaderboard States
   const [players, setPlayers] = useState([]);
   const [loginError, setLoginError] = useState('');
   
-  // Custom increments state for each team (Key: teamId, Value: number)
+  // Custom increments state for each team
   const [customAmounts, setCustomAmounts] = useState({});
 
-  // 1. Check localStorage on mount to persist login
+  // 1. Check localStorage on mount to persist login session
   useEffect(() => {
     const savedLogin = localStorage.getItem('isLoggedIn');
-    const savedUsername = localStorage.getItem('username');
     const savedRole = localStorage.getItem('userRole');
 
-    if (savedLogin === 'true' && savedUsername && savedRole) {
+    if (savedLogin === 'true' && savedRole) {
       setIsLoggedIn(true);
-      setUsername(savedUsername);
       setUserRole(savedRole);
     }
   }, []);
@@ -45,34 +43,42 @@ export default function Home() {
     }
   }, [isLoggedIn]);
 
-  // Handle Login
-  async function handleLogin(e) {
+  // Handle Admin Login (Password Only)
+  async function handleAdminLogin(e) {
     e.preventDefault();
     setLoginError('');
     
+    // بنعمل تشيك على الباسورد وبنثبت اسم المستخدم 'admin' تلقائياً
     const { data, error } = await supabase
       .from('system_users')
       .select('*')
-      .eq('username', username)
+      .eq('username', 'admin') 
       .eq('password', password)
+      .eq('role', 'admin')
       .single();
 
     if (error || !data) {
-      setLoginError('Invalid username or password!');
+      setLoginError('Invalid Password!');
     } else {
-      setUserRole(data.role);
+      setUserRole('admin');
       setIsLoggedIn(true);
       
-      // Save data to localStorage to prevent logout on refresh
       localStorage.setItem('isLoggedIn', 'true');
-      localStorage.setItem('username', username);
-      localStorage.setItem('userRole', data.role);
+      localStorage.setItem('userRole', 'admin');
     }
+  }
+
+  // Handle Public User Access (No Password)
+  function handleUserAccess() {
+    setUserRole('user');
+    setIsLoggedIn(true);
+
+    localStorage.setItem('isLoggedIn', 'true');
+    localStorage.setItem('userRole', 'user');
   }
 
   // Update Points dynamically with custom amounts
   async function updatePoints(id, currentPoints, direction) {
-    // Get the custom amount typed for this team, default to 1 if empty or invalid
     const amountInput = customAmounts[id];
     const step = amountInput !== undefined && amountInput !== '' ? Math.max(0, parseInt(amountInput) || 0) : 1;
     
@@ -86,17 +92,11 @@ export default function Home() {
 
     if (!error) {
       fetchLeaderboard();
-      // Clear the input field for that team after successful update
       setCustomAmounts(prev => ({ ...prev, [id]: '' }));
     }
   }
 
-  // Handle local change for input text field per team
-  function handleAmountInputChange(id, value) {
-    setCustomAmounts(prev => ({ ...prev, [id]: value }));
-  }
-
-  // Update Points Directly by Typing in the points box itself
+  // Handle Direct Points Change
   async function handleDirectPointsChange(id, value) {
     const newPoints = Math.max(0, parseInt(value) || 0);
     const { error } = await supabase
@@ -107,19 +107,17 @@ export default function Home() {
     if (!error) fetchLeaderboard();
   }
 
-  // Logout
+  // Logout / Back to Gate
   function handleLogout() {
     setIsLoggedIn(false);
-    setUsername('');
+    setShowAdminForm(false);
     setPassword('');
     setUserRole('');
-    // Clear localStorage values
+    
     localStorage.removeItem('isLoggedIn');
-    localStorage.removeItem('username');
     localStorage.removeItem('userRole');
   }
 
-  // أسماء فرق ألفا الحقيقية للفصل التام
   const alphaNames = ['anchors', 'heroes', 'pirates', 'seahorse', 'seals', 'whales'];
 
   const alphaTeams = players
@@ -130,46 +128,73 @@ export default function Home() {
     .filter(p => !alphaNames.includes(p.name?.toLowerCase().trim()))
     .sort((a, b) => b.points - a.points);
 
-  // 1. LOGIN SCREEN
+  // 1. GATEWAY SCREEN (CHOOSING ROLE)
   if (!isLoggedIn) {
     return (
       <main className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4">
-        <div className="bg-white border border-gray-200 p-8 rounded-2xl w-full max-w-md shadow-lg">
-          <h1 className="text-2xl font-bold text-center text-blue-600 mb-6">Scoring System</h1>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Username</label>
-              <input 
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                placeholder="Enter username"
-                required
-              />
+        <div className="bg-white border border-gray-200 p-8 rounded-2xl w-full max-w-md shadow-lg transition-all">
+          <h1 className="text-2xl font-bold text-center text-blue-600 mb-8">Scoring System</h1>
+          
+          {!showAdminForm ? (
+            // شاشة الاختيار الرئيسية
+            <div className="space-y-4">
+              <button 
+                onClick={handleUserAccess}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-xl font-bold transition-all text-lg flex items-center justify-center gap-2 shadow-sm"
+              >
+                <span>👁️</span> View Standings (User)
+              </button>
+              
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-gray-200"></div>
+                <span className="flex-shrink mx-4 text-gray-400 text-sm font-medium">OR</span>
+                <div className="flex-grow border-t border-gray-200"></div>
+              </div>
+
+              <button 
+                onClick={() => setShowAdminForm(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-xl font-bold transition-all text-lg flex items-center justify-center gap-2 shadow-sm"
+              >
+                <span>🔒</span> Admin Portal
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Password</label>
-              <input 
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                placeholder="Enter password"
-                required
-              />
-            </div>
-            {loginError && <p className="text-red-500 text-sm font-medium text-center">{loginError}</p>}
-            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-bold transition-colors mt-2">
-              Sign In
-            </button>
-          </form>
+          ) : (
+            // فورم الباسورد للأدمن فقط
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-gray-700 font-bold text-lg">Admin Security</h2>
+                <button 
+                  type="button" 
+                  onClick={() => setShowAdminForm(false)}
+                  className="text-sm text-blue-600 hover:underline font-semibold"
+                >
+                  ← Back
+                </button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Enter Admin Password</label>
+                <input 
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                  placeholder="••••••••"
+                  required
+                  autoFocus
+                />
+              </div>
+              {loginError && <p className="text-red-500 text-sm font-medium text-center">{loginError}</p>}
+              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-bold transition-colors mt-2 shadow-sm">
+                Verify & Enter
+              </button>
+            </form>
+          )}
         </div>
       </main>
     );
   }
 
-  // 2. MAIN DASHBOARD
+  // 2. MAIN DASHBOARD (FOR BOTH USER AND ADMIN)
   return (
     <main className="min-h-screen bg-[#F8F9FA] text-gray-900 p-6 md:p-8">
       <div className="max-w-5xl mx-auto space-y-10">
@@ -179,11 +204,11 @@ export default function Home() {
           <div>
             <h1 className="text-3xl font-bold text-gray-800 tracking-tight">System Standings</h1>
             <p className="text-gray-500 mt-1">
-              Logged in as: <span className="text-blue-600 font-bold">{username}</span> ({userRole === 'admin' ? 'Admin Mode' : 'View Mode'})
+              Mode: {userRole === 'admin' ? <span className="text-red-600 font-bold">Admin (Full Access)</span> : <span className="text-emerald-600 font-bold">Viewer (Read Only)</span>}
             </p>
           </div>
           <button onClick={handleLogout} className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 px-5 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm">
-            Sign Out
+            {userRole === 'admin' ? 'Sign Out' : 'Exit View'}
           </button>
         </header>
 
@@ -241,7 +266,7 @@ export default function Home() {
                             type="number"
                             placeholder="Val"
                             value={customAmounts[player.id] || ''}
-                            onChange={(e) => handleAmountInputChange(player.id, e.target.value)}
+                            onChange={(e) => setCustomAmounts(prev => ({ ...prev, [player.id]: e.target.value }))}
                             className="w-16 text-center text-sm font-semibold border border-gray-300 rounded-xl py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                           />
                           <button onClick={() => updatePoints(player.id, player.points, 'up')} className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
@@ -310,7 +335,7 @@ export default function Home() {
                             type="number"
                             placeholder="Val"
                             value={customAmounts[player.id] || ''}
-                            onChange={(e) => handleAmountInputChange(player.id, e.target.value)}
+                            onChange={(e) => setCustomAmounts(prev => ({ ...prev, [player.id]: e.target.value }))}
                             className="w-16 text-center text-sm font-semibold border border-gray-300 rounded-xl py-1.5 focus:outline-none focus:ring-1 focus:ring-red-500 bg-white"
                           />
                           <button onClick={() => updatePoints(player.id, player.points, 'up')} className="bg-red-600 hover:bg-red-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
