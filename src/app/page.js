@@ -13,6 +13,22 @@ export default function Home() {
   // Leaderboard States
   const [players, setPlayers] = useState([]);
   const [loginError, setLoginError] = useState('');
+  
+  // Custom increments state for each team (Key: teamId, Value: number)
+  const [customAmounts, setCustomAmounts] = useState({});
+
+  // 1. Check localStorage on mount to persist login
+  useEffect(() => {
+    const savedLogin = localStorage.getItem('isLoggedIn');
+    const savedUsername = localStorage.getItem('username');
+    const savedRole = localStorage.getItem('userRole');
+
+    if (savedLogin === 'true' && savedUsername && savedRole) {
+      setIsLoggedIn(true);
+      setUsername(savedUsername);
+      setUserRole(savedRole);
+    }
+  }, []);
 
   // Fetch Leaderboard Data
   async function fetchLeaderboard() {
@@ -46,21 +62,41 @@ export default function Home() {
     } else {
       setUserRole(data.role);
       setIsLoggedIn(true);
+      
+      // Save data to localStorage to prevent logout on refresh
+      localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('username', username);
+      localStorage.setItem('userRole', data.role);
     }
   }
 
-  // Update Points by Button (+/-)
-  async function updatePoints(id, currentPoints, amount) {
-    const newPoints = Math.max(0, currentPoints + amount);
+  // Update Points dynamically with custom amounts
+  async function updatePoints(id, currentPoints, direction) {
+    // Get the custom amount typed for this team, default to 1 if empty or invalid
+    const amountInput = customAmounts[id];
+    const step = amountInput !== undefined && amountInput !== '' ? Math.max(0, parseInt(amountInput) || 0) : 1;
+    
+    const change = direction === 'up' ? step : -step;
+    const newPoints = Math.max(0, currentPoints + change);
+
     const { error } = await supabase
       .from('leaderboard')
       .update({ points: newPoints })
       .eq('id', id);
 
-    if (!error) fetchLeaderboard();
+    if (!error) {
+      fetchLeaderboard();
+      // Clear the input field for that team after successful update
+      setCustomAmounts(prev => ({ ...prev, [id]: '' }));
+    }
   }
 
-  // Update Points Directly by Typing
+  // Handle local change for input text field per team
+  function handleAmountInputChange(id, value) {
+    setCustomAmounts(prev => ({ ...prev, [id]: value }));
+  }
+
+  // Update Points Directly by Typing in the points box itself
   async function handleDirectPointsChange(id, value) {
     const newPoints = Math.max(0, parseInt(value) || 0);
     const { error } = await supabase
@@ -77,6 +113,10 @@ export default function Home() {
     setUsername('');
     setPassword('');
     setUserRole('');
+    // Clear localStorage values
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('username');
+    localStorage.removeItem('userRole');
   }
 
   // أسماء فرق ألفا الحقيقية للفصل التام
@@ -161,7 +201,7 @@ export default function Home() {
                   <th className="px-6 py-4 w-20 text-center">Rank</th>
                   <th className="px-6 py-4">Team Name</th>
                   <th className="px-6 py-4 text-center w-36">Points</th>
-                  {userRole === 'admin' && <th className="px-6 py-4 text-center w-40">Actions</th>}
+                  {userRole === 'admin' && <th className="px-6 py-4 text-center w-56">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -197,8 +237,15 @@ export default function Home() {
                     {userRole === 'admin' && (
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => updatePoints(player.id, player.points, 1)} className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
-                          <button onClick={() => updatePoints(player.id, player.points, -1)} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-9 h-9 rounded-xl font-bold text-xl transition-all active:scale-95">-</button>
+                          <input 
+                            type="number"
+                            placeholder="Val"
+                            value={customAmounts[player.id] || ''}
+                            onChange={(e) => handleAmountInputChange(player.id, e.target.value)}
+                            className="w-16 text-center text-sm font-semibold border border-gray-300 rounded-xl py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                          />
+                          <button onClick={() => updatePoints(player.id, player.points, 'up')} className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
+                          <button onClick={() => updatePoints(player.id, player.points, 'down')} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-9 h-9 rounded-xl font-bold text-xl transition-all active:scale-95">-</button>
                         </div>
                       </td>
                     )}
@@ -223,7 +270,7 @@ export default function Home() {
                   <th className="px-6 py-4 w-20 text-center">Rank</th>
                   <th className="px-6 py-4">Team Name</th>
                   <th className="px-6 py-4 text-center w-36">Points</th>
-                  {userRole === 'admin' && <th className="px-6 py-4 text-center w-40">Actions</th>}
+                  {userRole === 'admin' && <th className="px-6 py-4 text-center w-56">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -259,8 +306,15 @@ export default function Home() {
                     {userRole === 'admin' && (
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => updatePoints(player.id, player.points, 1)} className="bg-red-600 hover:bg-red-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
-                          <button onClick={() => updatePoints(player.id, player.points, -1)} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-9 h-9 rounded-xl font-bold text-xl transition-all active:scale-95">-</button>
+                          <input 
+                            type="number"
+                            placeholder="Val"
+                            value={customAmounts[player.id] || ''}
+                            onChange={(e) => handleAmountInputChange(player.id, e.target.value)}
+                            className="w-16 text-center text-sm font-semibold border border-gray-300 rounded-xl py-1.5 focus:outline-none focus:ring-1 focus:ring-red-500 bg-white"
+                          />
+                          <button onClick={() => updatePoints(player.id, player.points, 'up')} className="bg-red-600 hover:bg-red-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
+                          <button onClick={() => updatePoints(player.id, player.points, 'down')} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-9 h-9 rounded-xl font-bold text-xl transition-all active:scale-95">-</button>
                         </div>
                       </td>
                     )}
