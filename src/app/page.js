@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export default function Home() {
-  // Navigation & Role States
+  // Navigation, Role & Tab States
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showAdminForm, setShowAdminForm] = useState(false); // لو true يظهر فورم الأدمن
+  const [showAdminForm, setShowAdminForm] = useState(false);
   const [userRole, setUserRole] = useState(''); // 'admin' أو 'user'
   const [password, setPassword] = useState('');
+  const [activeTab, setActiveTab] = useState('groups'); // 'groups' أو 'overall'
   
   // Leaderboard States
   const [players, setPlayers] = useState([]);
@@ -17,7 +18,7 @@ export default function Home() {
   // Custom increments state for each team
   const [customAmounts, setCustomAmounts] = useState({});
 
-  // 1. Check localStorage on mount to persist login session
+  // Check localStorage on mount to persist login session
   useEffect(() => {
     const savedLogin = localStorage.getItem('isLoggedIn');
     const savedRole = localStorage.getItem('userRole');
@@ -48,7 +49,6 @@ export default function Home() {
     e.preventDefault();
     setLoginError('');
     
-    // بنعمل تشيك على الباسورد وبنثبت اسم المستخدم 'admin' تلقائياً
     const { data, error } = await supabase
       .from('system_users')
       .select('*')
@@ -113,6 +113,7 @@ export default function Home() {
     setShowAdminForm(false);
     setPassword('');
     setUserRole('');
+    setActiveTab('groups');
     
     localStorage.removeItem('isLoggedIn');
     localStorage.removeItem('userRole');
@@ -120,6 +121,7 @@ export default function Home() {
 
   const alphaNames = ['anchors', 'heroes', 'pirates', 'seahorse', 'seals', 'whales'];
 
+  // 1. تصفية وترتيب مجموعات منفصلة
   const alphaTeams = players
     .filter(p => alphaNames.includes(p.name?.toLowerCase().trim()))
     .sort((a, b) => b.points - a.points);
@@ -128,7 +130,15 @@ export default function Home() {
     .filter(p => !alphaNames.includes(p.name?.toLowerCase().trim()))
     .sort((a, b) => b.points - a.points);
 
-  // 1. GATEWAY SCREEN (CHOOSING ROLE)
+  // 2. دمج وترتيب المجموعتين معاً وتحديد نوع كل فريق
+  const overallTeams = players
+    .map(p => ({
+      ...p,
+      group: alphaNames.includes(p.name?.toLowerCase().trim()) ? 'Alpha' : 'Beta'
+    }))
+    .sort((a, b) => b.points - a.points);
+
+  // GATEWAY SCREEN
   if (!isLoggedIn) {
     return (
       <main className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4">
@@ -136,13 +146,12 @@ export default function Home() {
           <h1 className="text-2xl font-bold text-center text-blue-600 mb-8">Scoring System</h1>
           
           {!showAdminForm ? (
-            // شاشة الاختيار الرئيسية
             <div className="space-y-4">
               <button 
                 onClick={handleUserAccess}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-xl font-bold transition-all text-lg flex items-center justify-center gap-2 shadow-sm"
               >
-                <span></span> View Standings 
+                View Standings
               </button>
               
               <div className="relative flex py-2 items-center">
@@ -155,11 +164,10 @@ export default function Home() {
                 onClick={() => setShowAdminForm(true)}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-xl font-bold transition-all text-lg flex items-center justify-center gap-2 shadow-sm"
               >
-                <span>🔒</span> Admin Portal
+                Admin Portal
               </button>
             </div>
           ) : (
-            // فورم الباسورد للأدمن فقط
             <form onSubmit={handleAdminLogin} className="space-y-4">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-gray-700 font-bold text-lg">Admin Security</h2>
@@ -194,10 +202,9 @@ export default function Home() {
     );
   }
 
-  // 2. MAIN DASHBOARD (FOR BOTH USER AND ADMIN)
   return (
     <main className="min-h-screen bg-[#F8F9FA] text-gray-900 p-6 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-10">
+      <div className="max-w-5xl mx-auto space-y-8">
         
         {/* Header */}
         <header className="flex justify-between items-center border-b border-gray-200 pb-6">
@@ -212,143 +219,262 @@ export default function Home() {
           </button>
         </header>
 
-        {/* ALPHA GROUP */}
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="bg-blue-600 px-6 py-4 flex justify-between items-center">
-            <h2 className="text-xl font-extrabold text-white tracking-wide">Alpha Group</h2>
-            <span className="bg-white/20 text-white text-xs px-3 py-1 rounded-full font-bold uppercase">6 Teams</span>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold uppercase text-gray-500 tracking-wider">
-                  <th className="px-6 py-4 w-20 text-center">Rank</th>
-                  <th className="px-6 py-4">Team Name</th>
-                  <th className="px-6 py-4 text-center w-36">Points</th>
-                  {userRole === 'admin' && <th className="px-6 py-4 text-center w-56">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {alphaTeams.map((player, index) => (
-                  <tr key={player.id} className="hover:bg-gray-50/70 transition-colors">
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-100 text-gray-600' : index === 2 ? 'bg-amber-100 text-amber-700' : 'text-gray-400'}`}>
-                        {index + 1}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-semibold text-gray-800 text-lg">{player.name}</td>
-                    <td className="px-6 py-4 text-center">
-                      {userRole === 'admin' ? (
-                        <input 
-                          type="number"
-                          key={player.id + '-' + player.points}
-                          defaultValue={player.points}
-                          onBlur={(e) => handleDirectPointsChange(player.id, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleDirectPointsChange(player.id, e.target.value);
-                              e.target.blur();
-                            }
-                          }}
-                          className="w-20 text-center text-lg font-bold font-mono text-blue-600 bg-blue-50 border border-blue-200 rounded-xl py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      ) : (
-                        <span className="inline-block text-lg font-bold font-mono text-blue-600 bg-blue-50 border border-blue-100 px-4 py-1 rounded-xl min-w-[70px]">
-                          {player.points}
-                        </span>
-                      )}
-                    </td>
-                    {userRole === 'admin' && (
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <input 
-                            type="number"
-                            placeholder="Val"
-                            value={customAmounts[player.id] || ''}
-                            onChange={(e) => setCustomAmounts(prev => ({ ...prev, [player.id]: e.target.value }))}
-                            className="w-16 text-center text-sm font-semibold border border-gray-300 rounded-xl py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-                          />
-                          <button onClick={() => updatePoints(player.id, player.points, 'up')} className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
-                          <button onClick={() => updatePoints(player.id, player.points, 'down')} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-9 h-9 rounded-xl font-bold text-xl transition-all active:scale-95">-</button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {/* Tab Switcher */}
+        <div className="flex bg-gray-200/70 p-1 rounded-xl w-fit border border-gray-300/40">
+          <button 
+            onClick={() => setActiveTab('groups')}
+            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'groups' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+          >
+            Groups View
+          </button>
+          <button 
+            onClick={() => setActiveTab('overall')}
+            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'overall' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+          >
+            Overall Standings 🔥
+          </button>
         </div>
 
-        {/* BETA GROUP */}
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="bg-red-600 px-6 py-4 flex justify-between items-center">
-            <h2 className="text-xl font-extrabold text-white tracking-wide">Beta Group</h2>
-            <span className="bg-white/20 text-white text-xs px-3 py-1 rounded-full font-bold uppercase">6 Teams</span>
+        {/* TAB 1: GROUPS VIEW */}
+        {activeTab === 'groups' && (
+          <div className="space-y-10">
+            {/* ALPHA GROUP */}
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+              <div className="bg-blue-600 px-6 py-4 flex justify-between items-center">
+                <h2 className="text-xl font-extrabold text-white tracking-wide">Alpha Group</h2>
+                <span className="bg-white/20 text-white text-xs px-3 py-1 rounded-full font-bold uppercase">6 Teams</span>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold uppercase text-gray-500 tracking-wider">
+                      <th className="px-6 py-4 w-20 text-center">Rank</th>
+                      <th className="px-6 py-4">Team Name</th>
+                      <th className="px-6 py-4 text-center w-36">Points</th>
+                      {userRole === 'admin' && <th className="px-6 py-4 text-center w-56">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {alphaTeams.map((player, index) => (
+                      <tr key={player.id} className="hover:bg-gray-50/70 transition-colors">
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-100 text-gray-600' : index === 2 ? 'bg-amber-100 text-amber-700' : 'text-gray-400'}`}>
+                            {index + 1}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-gray-800 text-lg">{player.name}</td>
+                        <td className="px-6 py-4 text-center">
+                          {userRole === 'admin' ? (
+                            <input 
+                              type="number"
+                              key={player.id + '-' + player.points}
+                              defaultValue={player.points}
+                              onBlur={(e) => handleDirectPointsChange(player.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleDirectPointsChange(player.id, e.target.value);
+                                  e.target.blur();
+                                }
+                              }}
+                              className="w-20 text-center text-lg font-bold font-mono text-blue-600 bg-blue-50 border border-blue-200 rounded-xl py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <span className="inline-block text-lg font-bold font-mono text-blue-600 bg-blue-50 border border-blue-100 px-4 py-1 rounded-xl min-w-[70px]">
+                              {player.points}
+                            </span>
+                          )}
+                        </td>
+                        {userRole === 'admin' && (
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <input 
+                                type="number"
+                                placeholder="Val"
+                                value={customAmounts[player.id] || ''}
+                                onChange={(e) => setCustomAmounts(prev => ({ ...prev, [player.id]: e.target.value }))}
+                                className="w-16 text-center text-sm font-semibold border border-gray-300 rounded-xl py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                              />
+                              <button onClick={() => updatePoints(player.id, player.points, 'up')} className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
+                              <button onClick={() => updatePoints(player.id, player.points, 'down')} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-9 h-9 rounded-xl font-bold text-xl transition-all active:scale-95">-</button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* BETA GROUP */}
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+              <div className="bg-red-600 px-6 py-4 flex justify-between items-center">
+                <h2 className="text-xl font-extrabold text-white tracking-wide">Beta Group</h2>
+                <span className="bg-white/20 text-white text-xs px-3 py-1 rounded-full font-bold uppercase">6 Teams</span>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold uppercase text-gray-500 tracking-wider">
+                      <th className="px-6 py-4 w-20 text-center">Rank</th>
+                      <th className="px-6 py-4">Team Name</th>
+                      <th className="px-6 py-4 text-center w-36">Points</th>
+                      {userRole === 'admin' && <th className="px-6 py-4 text-center w-56">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {betaTeams.map((player, index) => (
+                      <tr key={player.id} className="hover:bg-gray-50/70 transition-colors">
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-100 text-gray-600' : index === 2 ? 'bg-amber-100 text-amber-700' : 'text-gray-400'}`}>
+                            {index + 1}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-gray-800 text-lg">{player.name}</td>
+                        <td className="px-6 py-4 text-center">
+                          {userRole === 'admin' ? (
+                            <input 
+                              type="number"
+                              key={player.id + '-' + player.points}
+                              defaultValue={player.points}
+                              onBlur={(e) => handleDirectPointsChange(player.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleDirectPointsChange(player.id, e.target.value);
+                                  e.target.blur();
+                                }
+                              }}
+                              className="w-20 text-center text-lg font-bold font-mono text-red-600 bg-red-50 border border-red-200 rounded-xl py-1 focus:outline-none focus:ring-2 focus:ring-red-500"
+                            />
+                          ) : (
+                            <span className="inline-block text-lg font-bold font-mono text-red-600 bg-red-50 border border-red-100 px-4 py-1 rounded-xl min-w-[70px]">
+                              {player.points}
+                            </span>
+                          )}
+                        </td>
+                        {userRole === 'admin' && (
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <input 
+                                type="number"
+                                placeholder="Val"
+                                value={customAmounts[player.id] || ''}
+                                onChange={(e) => setCustomAmounts(prev => ({ ...prev, [player.id]: e.target.value }))}
+                                className="w-16 text-center text-sm font-semibold border border-gray-300 rounded-xl py-1.5 focus:outline-none focus:ring-1 focus:ring-red-500 bg-white"
+                              />
+                              <button onClick={() => updatePoints(player.id, player.points, 'up')} className="bg-red-600 hover:bg-red-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
+                              <button onClick={() => updatePoints(player.id, player.points, 'down')} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-9 h-9 rounded-xl font-bold text-xl transition-all active:scale-95">-</button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold uppercase text-gray-500 tracking-wider">
-                  <th className="px-6 py-4 w-20 text-center">Rank</th>
-                  <th className="px-6 py-4">Team Name</th>
-                  <th className="px-6 py-4 text-center w-36">Points</th>
-                  {userRole === 'admin' && <th className="px-6 py-4 text-center w-56">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {betaTeams.map((player, index) => (
-                  <tr key={player.id} className="hover:bg-gray-50/70 transition-colors">
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-100 text-gray-600' : index === 2 ? 'bg-amber-100 text-amber-700' : 'text-gray-400'}`}>
-                        {index + 1}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-semibold text-gray-800 text-lg">{player.name}</td>
-                    <td className="px-6 py-4 text-center">
-                      {userRole === 'admin' ? (
-                        <input 
-                          type="number"
-                          key={player.id + '-' + player.points}
-                          defaultValue={player.points}
-                          onBlur={(e) => handleDirectPointsChange(player.id, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleDirectPointsChange(player.id, e.target.value);
-                              e.target.blur();
-                            }
-                          }}
-                          className="w-20 text-center text-lg font-bold font-mono text-red-600 bg-red-50 border border-red-200 rounded-xl py-1 focus:outline-none focus:ring-2 focus:ring-red-500"
-                        />
-                      ) : (
-                        <span className="inline-block text-lg font-bold font-mono text-red-600 bg-red-50 border border-red-100 px-4 py-1 rounded-xl min-w-[70px]">
-                          {player.points}
+        )}
+
+        {/* TAB 2: OVERALL STANDINGS (الجدول المدمج الجديد) */}
+        {activeTab === 'overall' && (
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="bg-slate-800 px-6 py-4 flex justify-between items-center">
+              <h2 className="text-xl font-extrabold text-white tracking-wide">Overall Leaderboard</h2>
+              <span className="bg-white/20 text-white text-xs px-3 py-1 rounded-full font-bold uppercase">12 Teams Total</span>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold uppercase text-gray-500 tracking-wider">
+                    <th className="px-6 py-4 w-20 text-center">Rank</th>
+                    <th className="px-6 py-4">Team Name</th>
+                    <th className="px-6 py-4 text-center w-36">Group</th>
+                    <th className="px-6 py-4 text-center w-36">Points</th>
+                    {userRole === 'admin' && <th className="px-6 py-4 text-center w-56">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {overallTeams.map((player, index) => (
+                    <tr key={player.id} className="hover:bg-gray-50/70 transition-colors">
+                      {/* الترتيب العام من 1 لـ 12 */}
+                      <td className="px-6 py-4 text-center">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-100 text-gray-600' : index === 2 ? 'bg-amber-100 text-amber-700' : 'text-gray-400'}`}>
+                          {index + 1}
                         </span>
-                      )}
-                    </td>
-                    {userRole === 'admin' && (
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-gray-800 text-lg">{player.name}</td>
+                      
+                      {/* الشارات الملونة حسب المجموعة */}
+                      <td className="px-6 py-4 text-center">
+                        {player.group === 'Alpha' ? (
+                          <span className="bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                            Alpha
+                          </span>
+                        ) : (
+                          <span className="bg-red-50 text-red-600 border border-red-200 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                            Beta
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-4 text-center">
+                        {userRole === 'admin' ? (
                           <input 
                             type="number"
-                            placeholder="Val"
-                            value={customAmounts[player.id] || ''}
-                            onChange={(e) => setCustomAmounts(prev => ({ ...prev, [player.id]: e.target.value }))}
-                            className="w-16 text-center text-sm font-semibold border border-gray-300 rounded-xl py-1.5 focus:outline-none focus:ring-1 focus:ring-red-500 bg-white"
+                            key={player.id + '-overall-' + player.points}
+                            defaultValue={player.points}
+                            onBlur={(e) => handleDirectPointsChange(player.id, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleDirectPointsChange(player.id, e.target.value);
+                                e.target.blur();
+                              }
+                            }}
+                            className={`w-20 text-center text-lg font-bold font-mono rounded-xl py-1 focus:outline-none focus:ring-2 ${player.group === 'Alpha' ? 'text-blue-600 bg-blue-50 border border-blue-200 focus:ring-blue-500' : 'text-red-600 bg-red-50 border border-red-200 focus:ring-red-500'}`}
                           />
-                          <button onClick={() => updatePoints(player.id, player.points, 'up')} className="bg-red-600 hover:bg-red-700 text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95">+</button>
-                          <button onClick={() => updatePoints(player.id, player.points, 'down')} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-9 h-9 rounded-xl font-bold text-xl transition-all active:scale-95">-</button>
-                        </div>
+                        ) : (
+                          <span className={`inline-block text-lg font-bold font-mono px-4 py-1 rounded-xl min-w-[70px] ${player.group === 'Alpha' ? 'text-blue-600 bg-blue-50 border border-blue-100' : 'text-red-600 bg-red-50 border border-red-100'}`}>
+                            {player.points}
+                          </span>
+                        )}
                       </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+                      {userRole === 'admin' && (
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <input 
+                              type="number"
+                              placeholder="Val"
+                              value={customAmounts[player.id] || ''}
+                              onChange={(e) => setCustomAmounts(prev => ({ ...prev, [player.id]: e.target.value }))}
+                              className={`w-16 text-center text-sm font-semibold border border-gray-300 rounded-xl py-1.5 focus:outline-none focus:ring-1 bg-white ${player.group === 'Alpha' ? 'focus:ring-blue-500' : 'focus:ring-red-500'}`}
+                            />
+                            <button 
+                              onClick={() => updatePoints(player.id, player.points, 'up')} 
+                              className={`text-white w-9 h-9 rounded-xl font-bold text-xl transition-all shadow-sm active:scale-95 ${player.group === 'Alpha' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'}`}
+                            >
+                              +
+                            </button>
+                            <button 
+                              onClick={() => updatePoints(player.id, player.points, 'down')} 
+                              className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-9 h-9 rounded-xl font-bold text-xl transition-all active:scale-95"
+                            >
+                              -
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
     </main>
